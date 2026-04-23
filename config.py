@@ -31,6 +31,7 @@ class SkillConfig:
     default_timeout_ms: int = 15000
     taobao_home_url: str = "https://www.taobao.com"
     storage_state_path: Path = DEFAULT_STORAGE_STATE_PATH
+    enable_stealth: bool = False
     log_level: str = "INFO"
 
 
@@ -49,6 +50,8 @@ def get_config() -> SkillConfig:
         storage_state_path=Path(
             os.getenv("SKILL_STORAGE_STATE_PATH", str(DEFAULT_STORAGE_STATE_PATH))
         ),
+        # TODO(phase-2): optional flag only. Stealth plugin is not required dependency.
+        enable_stealth=os.getenv("SKILL_ENABLE_STEALTH", "false").lower() == "true",
         log_level=os.getenv("SKILL_LOG_LEVEL", "INFO").upper(),
     )
 
