@@ -48,9 +48,11 @@ class _FakePage:
 
 
 class _FakeRuntime:
-    def __init__(self, page: _FakePage) -> None:
+    def __init__(self, page: _FakePage, visible_text_sequence: list[str] | None = None) -> None:
         self._page = page
         self.goto_calls: list[str] = []
+        self._visible_text_sequence = list(visible_text_sequence or [])
+        self.visible_text_calls = 0
 
     def goto(self, url: str) -> None:
         self.goto_calls.append(url)
@@ -60,6 +62,9 @@ class _FakeRuntime:
         return self._page
 
     def get_visible_text(self) -> str:
+        self.visible_text_calls += 1
+        if self._visible_text_sequence:
+            return self._visible_text_sequence.pop(0)
         return self._page.body_text
 
     def get_page_url(self) -> str:
@@ -141,6 +146,8 @@ def test_add_to_cart_returns_add_cart_failed_when_button_not_found() -> None:
 
     assert result["success"] is False
     assert result["error_code"] == ADD_CART_FAILED
+    assert "error_detail" in result
+    assert "detail" not in result
 
 
 def test_add_to_cart_returns_add_cart_failed_when_success_cannot_be_confirmed() -> None:
@@ -158,3 +165,29 @@ def test_add_to_cart_returns_add_cart_failed_when_success_cannot_be_confirmed() 
     assert button.clicked is True
     assert result["success"] is False
     assert result["error_code"] == ADD_CART_FAILED
+    assert "error_detail" in result
+    assert "detail" not in result
+
+
+def test_add_to_cart_retry_can_confirm_success_after_initial_miss() -> None:
+    button = _FakeElement("加入购物车")
+    page = _FakePage(
+        url="https://example.com/item/1",
+        body_text="点击后页面无明显反馈",
+        selector_map={"button:has-text('加入购物车')": [button]},
+    )
+    runtime = _FakeRuntime(
+        page,
+        visible_text_sequence=[
+            "点击后页面无明显反馈",
+            "点击后页面无明显反馈",
+            "已加入购物车",
+        ],
+    )
+    executor = CartExecutor(runtime=runtime, config=None)
+
+    result = executor.add_to_cart(_product(product_url=None))
+
+    assert button.clicked is True
+    assert result["success"] is True
+    assert runtime.visible_text_calls >= 2

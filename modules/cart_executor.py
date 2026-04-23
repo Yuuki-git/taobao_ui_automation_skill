@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from models import ProductCandidate
@@ -72,7 +73,7 @@ class CartExecutor:
                 {"reason": "button_click_failed", "exception": str(exc)},
             )
 
-        if self._has_success_signal(page):
+        if self._confirm_success_after_click(page):
             return {
                 "success": True,
                 "message": "Product added to cart successfully.",
@@ -85,6 +86,18 @@ class CartExecutor:
             "Add-to-cart could not be confirmed.",
             {"reason": "success_not_confirmed"},
         )
+
+    def _confirm_success_after_click(self, page: Any) -> bool:
+        """Poll success signals briefly after click to reduce premature failure."""
+
+        attempts = 4
+        sleep_seconds = 0.15
+        for idx in range(attempts):
+            if self._has_success_signal(page):
+                return True
+            if idx < attempts - 1:
+                time.sleep(sleep_seconds)
+        return False
 
     def _get_page(self) -> Any | None:
         if hasattr(self.runtime, "require_page"):
@@ -175,5 +188,4 @@ class CartExecutor:
             "message": message,
             "error_code": code,
             "error_detail": detail,
-            "detail": detail,
         }
