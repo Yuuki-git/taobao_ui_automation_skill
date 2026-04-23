@@ -194,6 +194,16 @@ class BrowserRuntime:
         page = self._require_page()
         return str(getattr(page, "url", "") or "")
 
+    def get_page(self) -> Any | None:
+        """Return current page if runtime is started, otherwise None."""
+
+        return self._page
+
+    def require_page(self) -> Any:
+        """Return current page and raise if runtime is not started."""
+
+        return self._require_page()
+
     def screenshot(self, path: str) -> None:
         """Capture full-page screenshot."""
 
