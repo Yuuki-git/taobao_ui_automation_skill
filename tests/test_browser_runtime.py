@@ -149,6 +149,7 @@ def test_search_keyword_invokes_fill_press_and_wait(tmp_path: Path) -> None:
     assert page.press_calls == [("input[name='q']", "Enter")]
     assert page.wait_load_state_calls
     assert page.wait_function_calls
+    assert "urlReady &&" in page.wait_function_calls[0][0]
 
 
 def test_get_page_html_and_visible_text_are_distinct(tmp_path: Path) -> None:

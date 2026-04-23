@@ -117,3 +117,16 @@ def test_html_keyword_alone_does_not_force_login() -> None:
     manager = AuthManager(runtime=runtime, config=SkillConfig())
 
     assert manager.ensure_authenticated(need_login=True) == AUTHENTICATED
+
+
+def test_generic_login_word_only_does_not_force_login() -> None:
+    runtime = _FakeRuntime(
+        login_page=False,
+        visible_text="login",
+        page_url="https://s.taobao.com/search?q=headset",
+        page_title="Search Results",
+        storage_exists=True,
+    )
+    manager = AuthManager(runtime=runtime, config=SkillConfig())
+
+    assert manager.ensure_authenticated(need_login=True) == AUTHENTICATED

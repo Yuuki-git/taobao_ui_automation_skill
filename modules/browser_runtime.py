@@ -144,8 +144,16 @@ class BrowserRuntime:
                 () => {
                   const href = window.location.href.toLowerCase();
                   const urlReady = href.includes("search") || href.includes("q=");
-                  const hasResultHint = document.querySelector("[data-index], .item, .card, .ctx-box, .m-itemlist");
-                  return urlReady || Boolean(hasResultHint);
+                  const hasResultContainer = Boolean(
+                    document.querySelector(".m-itemlist, .items, .tb-item, [data-index], .ctx-box")
+                  );
+                  const hasNoResultState = Boolean(
+                    document.querySelector(".no-result, .empty, .none, [class*='no-result'], [class*='empty']")
+                  );
+                  const hasSearchResultHint = /search|result|找到|相关商品|没有找到/i.test(
+                    document.body ? document.body.innerText : ""
+                  );
+                  return urlReady && (hasResultContainer || hasNoResultState || hasSearchResultHint);
                 }
                 """,
                 timeout=timeout,
@@ -203,7 +211,17 @@ class BrowserRuntime:
         text = self.get_visible_text().lower()
         return any(
             token in title or token in text
-            for token in ("login", "sign in", "account login", "sms login")
+            for token in (
+                "account login",
+                "sms login",
+                "scan login",
+                "please sign in",
+                "taobao login",
+                "请登录",
+                "账户登录",
+                "短信登录",
+                "扫码登录",
+            )
         )
 
     def _require_page(self) -> Any:
