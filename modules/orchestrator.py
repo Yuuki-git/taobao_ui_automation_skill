@@ -11,13 +11,13 @@ from modules.auth_manager import (
     AuthManager,
 )
 from modules.browser_runtime import BrowserRuntime
+from modules.cart_executor import CartExecutor
 from modules.error_codes import (
     ADD_CART_FAILED,
     CAPTCHA_DETECTED as CAPTCHA_DETECTED_CODE,
     LOGIN_REQUIRED as LOGIN_REQUIRED_CODE,
     NO_MATCHED_PRODUCT,
     RISK_CONTROL_PAGE as RISK_CONTROL_PAGE_CODE,
-    SKU_SELECTION_REQUIRED,
     UNKNOWN_ERROR,
     SkillError,
 )
@@ -45,7 +45,7 @@ class Orchestrator:
         self.runtime_factory = runtime_factory
         self.auth_manager_factory = auth_manager_factory
         self.product_parser_factory = product_parser_factory or ProductParser
-        self.cart_executor_factory = cart_executor_factory or _DefaultCartExecutor
+        self.cart_executor_factory = cart_executor_factory or CartExecutor
         self.notifier_factory = notifier_factory
 
     def run(self, payload: TaskPayload) -> SkillResult:
@@ -113,10 +113,13 @@ class Orchestrator:
             self._validate_cart_result(cart_result)
 
             if not cart_result.get("success"):
+                error_detail = cart_result.get("detail")
+                if error_detail is None:
+                    error_detail = cart_result.get("error_detail")
                 raise SkillError(
                     str(cart_result.get("error_code") or ADD_CART_FAILED),
                     str(cart_result.get("message") or "Failed to add product to cart."),
-                    _detail_to_dict(cart_result.get("detail")),
+                    _detail_to_dict(error_detail),
                 )
 
             result = SkillResult(
@@ -188,26 +191,6 @@ class Orchestrator:
                 "add_to_cart result must include success field.",
                 {"result_keys": sorted(cart_result.keys())},
             )
-
-
-class _DefaultCartExecutor:
-    """Phase-2 placeholder.
-
-    TODO(phase-3): replace with modules.cart_executor implementation.
-    """
-
-    def __init__(self, *, runtime: Any, config: Any, task_id: str | None = None):
-        self.runtime = runtime
-        self.config = config
-        self.task_id = task_id
-
-    def add_to_cart(self, product: Any) -> dict[str, Any]:
-        return {
-            "success": False,
-            "error_code": SKU_SELECTION_REQUIRED,
-            "message": "SKU selection requires human intervention in current version.",
-            "detail": {"phase": "phase-3", "product_title": getattr(product, "title", None)},
-        }
 
 
 def _detail_to_dict(detail: Any) -> dict[str, Any] | None:

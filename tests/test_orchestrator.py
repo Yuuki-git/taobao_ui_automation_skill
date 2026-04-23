@@ -11,8 +11,13 @@ if str(ROOT_DIR) not in sys.path:
 from config import SkillConfig
 from models import ProductCandidate, SkillResult, TaskPayload
 from modules.auth_manager import AUTHENTICATED, LOGIN_REQUIRED
-from modules.error_codes import LOGIN_REQUIRED as LOGIN_REQUIRED_CODE
-from modules.error_codes import NO_MATCHED_PRODUCT, SkillError
+from modules.error_codes import (
+    ADD_CART_FAILED,
+    LOGIN_REQUIRED as LOGIN_REQUIRED_CODE,
+    NO_MATCHED_PRODUCT,
+    SKU_SELECTION_REQUIRED,
+    SkillError,
+)
 from modules.orchestrator import Orchestrator
 from modules.product_parser import ProductParser
 
@@ -65,12 +70,13 @@ class _FakeProductParser:
 
 
 class _FakeCartExecutor:
-    def __init__(self, runtime, config):
+    def __init__(self, runtime, config, result=None):
         self.runtime = runtime
         self.config = config
+        self._result = result or {"success": True, "message": "ok", "error_code": None}
 
     def add_to_cart(self, product):
-        return {"success": True}
+        return self._result
 
 
 class _FakeNotifier:
@@ -191,3 +197,121 @@ def test_orchestrator_defaults_to_real_product_parser() -> None:
     orchestrator = Orchestrator(config=SkillConfig())
 
     assert orchestrator.product_parser_factory is ProductParser
+
+
+def test_orchestrator_add_to_cart_success_returns_completed() -> None:
+    selected = ProductCandidate(title="selected", price=1000.0, positive_rate=99.0)
+
+    def runtime_factory(config):
+        return _FakeRuntime(config)
+
+    def auth_factory(runtime, config):
+        return _FakeAuthManager(runtime, config, AUTHENTICATED)
+
+    def parser_factory(runtime, config):
+        return _FakeProductParser(runtime, config, [selected], selected)
+
+    def cart_factory(runtime, config):
+        return _FakeCartExecutor(
+            runtime,
+            config,
+            {"success": True, "message": "added", "error_code": None, "error_detail": None},
+        )
+
+    orchestrator = Orchestrator(
+        config=SkillConfig(),
+        runtime_factory=runtime_factory,
+        auth_manager_factory=auth_factory,
+        product_parser_factory=parser_factory,
+        cart_executor_factory=cart_factory,
+    )
+
+    result = orchestrator.run(_payload(action="add_to_cart"))
+
+    assert result.success is True
+    assert result.task_status == "completed"
+    assert result.selected_product is not None
+
+
+def test_orchestrator_add_to_cart_maps_sku_selection_required_error() -> None:
+    selected = ProductCandidate(title="selected", price=1000.0, positive_rate=99.0)
+    runtime_ref = {}
+
+    def runtime_factory(config):
+        runtime = _FakeRuntime(config)
+        runtime_ref["runtime"] = runtime
+        return runtime
+
+    def auth_factory(runtime, config):
+        return _FakeAuthManager(runtime, config, AUTHENTICATED)
+
+    def parser_factory(runtime, config):
+        return _FakeProductParser(runtime, config, [selected], selected)
+
+    def cart_factory(runtime, config):
+        return _FakeCartExecutor(
+            runtime,
+            config,
+            {
+                "success": False,
+                "message": "sku required",
+                "error_code": SKU_SELECTION_REQUIRED,
+                "detail": {"reason": "need sku"},
+            },
+        )
+
+    orchestrator = Orchestrator(
+        config=SkillConfig(),
+        runtime_factory=runtime_factory,
+        auth_manager_factory=auth_factory,
+        product_parser_factory=parser_factory,
+        cart_executor_factory=cart_factory,
+    )
+
+    with pytest.raises(SkillError) as exc_info:
+        orchestrator.run(_payload(action="add_to_cart"))
+
+    assert exc_info.value.code == SKU_SELECTION_REQUIRED
+    assert runtime_ref["runtime"].closed is True
+
+
+def test_orchestrator_add_to_cart_maps_add_cart_failed_error() -> None:
+    selected = ProductCandidate(title="selected", price=1000.0, positive_rate=99.0)
+    runtime_ref = {}
+
+    def runtime_factory(config):
+        runtime = _FakeRuntime(config)
+        runtime_ref["runtime"] = runtime
+        return runtime
+
+    def auth_factory(runtime, config):
+        return _FakeAuthManager(runtime, config, AUTHENTICATED)
+
+    def parser_factory(runtime, config):
+        return _FakeProductParser(runtime, config, [selected], selected)
+
+    def cart_factory(runtime, config):
+        return _FakeCartExecutor(
+            runtime,
+            config,
+            {
+                "success": False,
+                "message": "not confirmed",
+                "error_code": ADD_CART_FAILED,
+                "detail": {"reason": "missing feedback"},
+            },
+        )
+
+    orchestrator = Orchestrator(
+        config=SkillConfig(),
+        runtime_factory=runtime_factory,
+        auth_manager_factory=auth_factory,
+        product_parser_factory=parser_factory,
+        cart_executor_factory=cart_factory,
+    )
+
+    with pytest.raises(SkillError) as exc_info:
+        orchestrator.run(_payload(action="add_to_cart"))
+
+    assert exc_info.value.code == ADD_CART_FAILED
+    assert runtime_ref["runtime"].closed is True
