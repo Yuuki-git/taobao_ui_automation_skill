@@ -2,20 +2,18 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from config import SkillConfig
 from modules.error_codes import NETWORK_ERROR, PAGE_STRUCTURE_CHANGED, SEARCH_TIMEOUT, SkillError
-
-
-SEARCH_INPUT_SELECTOR = "input[name='q']"
+from modules.selectors import SEARCH_INPUT_SELECTOR
 
 
 class BrowserRuntime:
-    """Wrap Playwright lifecycle and common Taobao page operations."""
+    """Playwright runtime wrapper for lifecycle and basic page operations."""
 
     def __init__(
         self,
@@ -35,13 +33,13 @@ class BrowserRuntime:
         )
 
     def has_storage_state(self) -> bool:
-        """Return whether storage state file exists and contains data."""
+        """Return whether storage-state file exists and has content."""
 
         path = Path(self.config.storage_state_path)
         return path.exists() and path.is_file() and path.stat().st_size > 0
 
     def start(self) -> None:
-        """Start Playwright, browser, context, and page."""
+        """Start Playwright and initialize browser context/page."""
 
         if self._page is not None:
             return
@@ -56,10 +54,10 @@ class BrowserRuntime:
         if self.has_storage_state():
             context_kwargs["storage_state"] = str(self.config.storage_state_path)
 
-        # Optional flag only. We intentionally do not require any stealth plugin.
+        # Optional toggle only; no stealth dependency is required.
         if self.config.enable_stealth:
             self._logger.info(
-                "Stealth flag is enabled but no stealth dependency is enforced in phase-2."
+                "Stealth toggle is enabled, but stealth plugin is not required in this version."
             )
 
         self._context = self._browser.new_context(**context_kwargs)
@@ -71,33 +69,26 @@ class BrowserRuntime:
     def close(self) -> None:
         """Close page/context/browser/playwright safely."""
 
-        errors: list[str] = []
-
-        for obj_name, close_fn in (
-            ("page", getattr(self._page, "close", None)),
-            ("context", getattr(self._context, "close", None)),
-            ("browser", getattr(self._browser, "close", None)),
-            ("playwright", getattr(self._playwright, "stop", None)),
+        for close_fn in (
+            getattr(self._page, "close", None),
+            getattr(self._context, "close", None),
+            getattr(self._browser, "close", None),
+            getattr(self._playwright, "stop", None),
         ):
             if close_fn is None:
                 continue
             try:
                 close_fn()
-            except Exception as exc:  # pragma: no cover - defensive cleanup
-                errors.append(f"{obj_name}:{exc}")
+            except Exception:  # pragma: no cover - defensive cleanup
+                pass
 
         self._page = None
         self._context = None
         self._browser = None
         self._playwright = None
 
-        if errors:
-            self._logger.warning("Runtime close had issues: %s", "; ".join(errors))
-        else:
-            self._logger.info("Browser runtime closed.")
-
     def goto(self, url: str) -> None:
-        """Navigate to target URL with timeout handling."""
+        """Navigate to URL and wait for DOM readiness."""
 
         page = self._require_page()
         try:
@@ -114,35 +105,80 @@ class BrowserRuntime:
             ) from exc
 
     def open_taobao_home(self) -> None:
-        """Open Taobao home page."""
+        """Open Taobao homepage."""
 
         self.goto(self.config.taobao_home_url)
 
     def search_keyword(self, keyword: str) -> None:
-        """Fill keyword in search input and submit."""
+        """Submit keyword search and wait for result page readiness."""
 
         page = self._require_page()
         try:
             page.fill(SEARCH_INPUT_SELECTOR, keyword)
             page.press(SEARCH_INPUT_SELECTOR, "Enter")
+            self.wait_for_search_results_ready()
         except PlaywrightTimeoutError as exc:
             raise SkillError(
                 SEARCH_TIMEOUT,
                 "Search operation timed out.",
                 {"keyword": keyword, "timeout_ms": self.config.default_timeout_ms},
             ) from exc
+        except SkillError:
+            raise
         except Exception as exc:
             raise SkillError(
                 PAGE_STRUCTURE_CHANGED,
-                "Search input selector is not available on current page.",
+                "Search input selector is unavailable on current page.",
                 {"selector": SEARCH_INPUT_SELECTOR},
             ) from exc
 
-    def get_page_text(self) -> str:
-        """Return current page HTML text for lightweight rule checks."""
+    def wait_for_search_results_ready(self) -> None:
+        """Wait until search results page is ready for parser consumption."""
+
+        page = self._require_page()
+        timeout = self.config.default_timeout_ms
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=timeout)
+            page.wait_for_function(
+                """
+                () => {
+                  const href = window.location.href.toLowerCase();
+                  const urlReady = href.includes("search") || href.includes("q=");
+                  const hasResultHint = document.querySelector("[data-index], .item, .card, .ctx-box, .m-itemlist");
+                  return urlReady || Boolean(hasResultHint);
+                }
+                """,
+                timeout=timeout,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise SkillError(
+                SEARCH_TIMEOUT,
+                "Search results page is not ready before timeout.",
+                {"timeout_ms": timeout},
+            ) from exc
+
+    def get_page_html(self) -> str:
+        """Return full page HTML."""
 
         page = self._require_page()
         return page.content()
+
+    def get_visible_text(self) -> str:
+        """Return visible body text only."""
+
+        page = self._require_page()
+        return page.inner_text("body")
+
+    def get_page_text(self) -> str:
+        """Backward-compatible alias for visible text."""
+
+        return self.get_visible_text()
+
+    def get_page_title(self) -> str:
+        """Return current page title."""
+
+        page = self._require_page()
+        return page.title()
 
     def get_page_url(self) -> str:
         """Return current page URL."""
@@ -151,20 +187,24 @@ class BrowserRuntime:
         return str(getattr(page, "url", "") or "")
 
     def screenshot(self, path: str) -> None:
-        """Capture a full-page screenshot."""
+        """Capture full-page screenshot."""
 
         page = self._require_page()
         page.screenshot(path=path, full_page=True)
 
     def is_login_page(self) -> bool:
-        """Detect login page from URL or page text hints."""
+        """Detect login page by URL, title, and visible text hints."""
 
         url = self.get_page_url().lower()
         if any(token in url for token in ("login.taobao.com", "member/login", "login.jhtml")):
             return True
 
-        page_text = self.get_page_text().lower()
-        return any(token in page_text for token in ("请登录", "login", "账户登录", "验证码登录"))
+        title = self.get_page_title().lower()
+        text = self.get_visible_text().lower()
+        return any(
+            token in title or token in text
+            for token in ("login", "sign in", "account login", "sms login")
+        )
 
     def _require_page(self) -> Any:
         if self._page is None:

@@ -1,33 +1,50 @@
-# Taobao UI Automation Test Skill
+---
+title: taobao_ui_automation_skill
+status: phase2
+last_updated: 2026-04-23
+---
 
-一个面向淘宝场景的 UI 自动化测试 Skill 工程骨架。当前目标是提供统一输入输出契约、错误码体系、入口调用方式和可扩展模块边界。
+# taobao_ui_automation_skill
 
-## 当前阶段
+Taobao UI automation skill scaffold for standardized input/output, flow orchestration,
+and incremental module evolution.
 
-当前为第二阶段：
-- 已完成：目录结构、输入模型、错误码、统一入口、Orchestrator 流程编排、Playwright 运行时封装、登录态检查、通知接口日志化
-- 待完成：候选商品解析与筛选细节、加购动作细节、选择器完善与页面细节增强
+## Current Status (Phase 2)
 
-## 环境要求
+Implemented:
+- standardized dataclass models and input validation
+- unified error codes and `SkillError`
+- `run_skill(payload)` entry with structured error mapping
+- orchestrator-level flow coordination
+- Playwright runtime lifecycle wrapper
+- authentication status checks (no complex auto-login)
+- notifier interface with log output
+
+Not implemented yet:
+- robust product candidate extraction/parsing
+- advanced filter scoring policy refinements
+- full add-to-cart action automation across complex SKU flows
+
+## Environment
 
 - Python 3.10+
-- Playwright（后续阶段用于浏览器自动化）
+- Playwright
 
-## 安装
+## Install
 
 ```bash
 pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-## 调用方式
+## Usage
 
 ```python
 from main import run_skill
 
 payload = {
     "platform": "taobao",
-    "keyword": "索尼耳机",
+    "keyword": "bluetooth headset",
     "constraints": {"positive_rate_gte": 99},
     "action": "search_only",
     "notify_channel": "feishu",
@@ -39,21 +56,16 @@ result = run_skill(payload)
 print(result)
 ```
 
-## 输入校验规则（第一阶段已生效）
+## Validation Rules
 
-- `platform` 仅支持 `taobao`，其他值返回 `INVALID_INPUT`
-- `keyword` 必填，且不能是空字符串
-- `action` 必填，仅支持 `search_only` / `add_to_cart`
-- `constraints.price_gte > constraints.price_lte` 时返回 `INVALID_INPUT`
-- `shop_type` 接受自由字符串，不做强枚举校验
+- `platform` must be `taobao`
+- `keyword` is required and cannot be empty
+- `action` must be `search_only` or `add_to_cart`
+- conflicting price constraints (`price_gte > price_lte`) are rejected as `INVALID_INPUT`
+- `shop_type` accepts free-form strings (no strict enum validation)
 
-## 返回约定
+## Runtime Notes
 
-- 返回结构遵循标准 schema：`success/task_status/selected_product/message/error_code/error_detail`
-- 内部会生成 `task_id` 用于日志追踪，但不会加入标准返回体
-
-## 已知限制
-
-- 当前版本不会绕过验证码与风控页
-- 当前版本不会实现复杂自动登录与复杂 SKU 自动选择
-- 第一阶段的业务编排模块仍为占位实现（会在后续阶段补齐）
+- `task_id` is generated internally for logs/tracing and is not returned in standard output
+- captcha/risk pages are detected and surfaced as structured statuses
+- no captcha bypass or stealth plugin dependency is required

@@ -1,8 +1,6 @@
 from pathlib import Path
 import sys
 
-import pytest
-
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -15,12 +13,16 @@ from modules.browser_runtime import BrowserRuntime
 class _FakePage:
     def __init__(self) -> None:
         self.url = "https://www.taobao.com"
+        self.page_title = "Taobao"
         self.timeout_value = None
-        self.text_content = "欢迎来到淘宝"
+        self.html_content = "<html><body><h1>Welcome</h1></body></html>"
+        self.visible_text = "Welcome"
         self.goto_calls = []
         self.fill_calls = []
         self.press_calls = []
         self.screenshot_calls = []
+        self.wait_load_state_calls = []
+        self.wait_function_calls = []
 
     def set_default_timeout(self, value: int) -> None:
         self.timeout_value = value
@@ -36,7 +38,20 @@ class _FakePage:
         self.press_calls.append((selector, key))
 
     def content(self) -> str:
-        return self.text_content
+        return self.html_content
+
+    def inner_text(self, selector: str) -> str:
+        assert selector == "body"
+        return self.visible_text
+
+    def title(self) -> str:
+        return self.page_title
+
+    def wait_for_load_state(self, state: str, timeout: int) -> None:
+        self.wait_load_state_calls.append((state, timeout))
+
+    def wait_for_function(self, script: str, timeout: int) -> None:
+        self.wait_function_calls.append((script, timeout))
 
     def screenshot(self, path: str, full_page: bool) -> None:
         self.screenshot_calls.append((path, full_page))
@@ -124,14 +139,34 @@ def test_start_uses_storage_state_when_exists(tmp_path: Path) -> None:
     assert browser.new_context_kwargs["storage_state"] == str(runtime.config.storage_state_path)
 
 
-def test_search_keyword_invokes_fill_and_press(tmp_path: Path) -> None:
+def test_search_keyword_invokes_fill_press_and_wait(tmp_path: Path) -> None:
     runtime, _pw, _chromium, _browser, page = _make_runtime(tmp_path)
     runtime.start()
 
-    runtime.search_keyword("蓝牙耳机")
+    runtime.search_keyword("bluetooth headset")
 
-    assert page.fill_calls == [("input[name='q']", "蓝牙耳机")]
+    assert page.fill_calls == [("input[name='q']", "bluetooth headset")]
     assert page.press_calls == [("input[name='q']", "Enter")]
+    assert page.wait_load_state_calls
+    assert page.wait_function_calls
+
+
+def test_get_page_html_and_visible_text_are_distinct(tmp_path: Path) -> None:
+    runtime, _pw, _chromium, _browser, page = _make_runtime(tmp_path)
+    runtime.start()
+    page.html_content = "<html><body><div>html-only</div></body></html>"
+    page.visible_text = "visible-only"
+
+    assert runtime.get_page_html() == "<html><body><div>html-only</div></body></html>"
+    assert runtime.get_visible_text() == "visible-only"
+
+
+def test_get_page_text_returns_visible_text_alias(tmp_path: Path) -> None:
+    runtime, _pw, _chromium, _browser, page = _make_runtime(tmp_path)
+    runtime.start()
+    page.visible_text = "visible alias"
+
+    assert runtime.get_page_text() == "visible alias"
 
 
 def test_is_login_page_detects_login_hint(tmp_path: Path) -> None:
@@ -140,4 +175,3 @@ def test_is_login_page_detects_login_hint(tmp_path: Path) -> None:
     page.url = "https://login.taobao.com/member/login.jhtml"
 
     assert runtime.is_login_page() is True
-

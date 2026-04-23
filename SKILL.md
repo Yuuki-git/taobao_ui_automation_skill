@@ -1,15 +1,18 @@
-# Skill Metadata
+---
+name: taobao_ui_automation_skill
+description: General Taobao product search and filtering skill scaffold with structured outputs.
+version: 0.2.0-phase2
+status: phase2
+---
 
-- name: `taobao_ui_automation_test_skill`
-- description: 通用商品搜索与筛选的淘宝 UI 自动化 Skill 骨架
-- version: `0.1.0-phase1`
+# Skill Contract
 
 ## Inputs
 
 ```json
 {
   "platform": "taobao",
-  "keyword": "索尼耳机",
+  "keyword": "bluetooth headset",
   "constraints": {
     "positive_rate_gte": 99,
     "price_lte": 3000,
@@ -23,9 +26,9 @@
 }
 ```
 
-说明：
-- `platform` 目前仅支持 `taobao`
-- `shop_type` 当前允许自由字符串，做宽松约束
+Notes:
+- `platform` currently supports only `taobao`
+- `shop_type` is free-form in validation, with loose matching planned in parser logic
 
 ## Outputs
 
@@ -34,34 +37,38 @@
   "success": true,
   "task_status": "completed",
   "selected_product": {
-    "title": "示例商品",
-    "price": 2399,
+    "title": "Example Product",
+    "price": 2399.0,
     "positive_rate": 99.4,
-    "shop_name": "示例店铺",
+    "shop_name": "Example Shop",
     "product_url": "https://example.com/product/123",
     "comment_count": 12000,
     "confidence": 0.88,
     "source_page": "search"
   },
-  "message": "任务执行完成",
+  "message": "Task completed",
   "error_code": null,
   "error_detail": null
 }
 ```
 
-## Execution Flow
+## Phase 2 Execution Flow
 
-1. `run_skill(payload)` 执行输入校验并生成 `task_id`
-2. 初始化 orchestrator（第一阶段为占位实现）
-3. 返回标准化结构结果（成功或结构化错误）
+1. `run_skill(payload)` validates payload and initializes `task_id`
+2. orchestrator starts browser runtime and opens Taobao home
+3. auth manager checks login/captcha/risk states
+4. runtime performs keyword search and waits for search-result page readiness
+5. parser/cart modules are still basic placeholders until phase3 completion
+6. notifier logs success/failure events
 
 ## Failure Cases
 
-- 输入不合法：`INVALID_INPUT`
-- 未登录：`LOGIN_REQUIRED`
-- 验证码：`CAPTCHA_DETECTED`
-- 风控页：`RISK_CONTROL_PAGE`
-- 无搜索结果：`NO_SEARCH_RESULT`
-- 无匹配商品：`NO_MATCHED_PRODUCT`
-- 加购失败：`ADD_CART_FAILED` / `SKU_SELECTION_REQUIRED`
-- 未知异常：`UNKNOWN_ERROR`
+- `INVALID_INPUT`
+- `LOGIN_REQUIRED`
+- `CAPTCHA_DETECTED`
+- `RISK_CONTROL_PAGE`
+- `NO_SEARCH_RESULT`
+- `NO_MATCHED_PRODUCT`
+- `ADD_CART_FAILED`
+- `SKU_SELECTION_REQUIRED`
+- `UNKNOWN_ERROR`
