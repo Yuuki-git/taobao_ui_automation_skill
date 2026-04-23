@@ -22,6 +22,7 @@ from modules.error_codes import (
     SkillError,
 )
 from modules.notifier import Notifier
+from modules.product_parser import ProductParser
 
 
 class Orchestrator:
@@ -43,7 +44,7 @@ class Orchestrator:
         self.config = config
         self.runtime_factory = runtime_factory
         self.auth_manager_factory = auth_manager_factory
-        self.product_parser_factory = product_parser_factory or _DefaultProductParser
+        self.product_parser_factory = product_parser_factory or ProductParser
         self.cart_executor_factory = cart_executor_factory or _DefaultCartExecutor
         self.notifier_factory = notifier_factory
 
@@ -187,26 +188,6 @@ class Orchestrator:
                 "add_to_cart result must include success field.",
                 {"result_keys": sorted(cart_result.keys())},
             )
-
-
-class _DefaultProductParser:
-    """Phase-2 placeholder.
-
-    TODO(phase-3): replace with modules.product_parser implementation.
-    """
-
-    def __init__(self, *, runtime: Any, config: Any, task_id: str | None = None):
-        self.runtime = runtime
-        self.config = config
-        self.task_id = task_id
-
-    def extract_candidates(self, max_candidates: int = 5) -> list[Any]:
-        return []
-
-    def select_best_candidate(
-        self, candidates: list[Any], keyword: str, constraints: Any
-    ) -> Any | None:
-        return None
 
 
 class _DefaultCartExecutor:

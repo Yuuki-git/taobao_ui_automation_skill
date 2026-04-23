@@ -14,6 +14,7 @@ from modules.auth_manager import AUTHENTICATED, LOGIN_REQUIRED
 from modules.error_codes import LOGIN_REQUIRED as LOGIN_REQUIRED_CODE
 from modules.error_codes import NO_MATCHED_PRODUCT, SkillError
 from modules.orchestrator import Orchestrator
+from modules.product_parser import ProductParser
 
 
 class _FakeRuntime:
@@ -185,3 +186,8 @@ def test_orchestrator_search_only_no_matched_product_returns_no_matched_result()
     assert result.task_status == "failed"
     assert result.error_code == NO_MATCHED_PRODUCT
 
+
+def test_orchestrator_defaults_to_real_product_parser() -> None:
+    orchestrator = Orchestrator(config=SkillConfig())
+
+    assert orchestrator.product_parser_factory is ProductParser
