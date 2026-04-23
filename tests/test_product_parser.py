@@ -306,6 +306,46 @@ def test_extract_candidates_selector_fallback_stops_on_first_usable_group() -> N
     assert page.locator_calls == [first_selector, second_selector]
 
 
+def test_extract_candidates_fallback_continues_when_first_group_yields_no_candidate() -> None:
+    first_selector = SEARCH_RESULT_CARD_SELECTORS[0]
+    second_selector = SEARCH_RESULT_CARD_SELECTORS[1]
+
+    page = _FakePage(
+        {
+            first_selector: [
+                _FakeCard(
+                    "\n".join(
+                        [
+                            "\u00a51999",
+                            "Official Store",
+                            "99.2% positive",
+                            "500 reviews",
+                        ]
+                    )
+                )
+            ],
+            second_selector: [
+                _FakeCard(
+                    "\n".join(
+                        [
+                            "Fallback Candidate",
+                            "\u00a51299",
+                            "300 reviews",
+                        ]
+                    )
+                )
+            ],
+        }
+    )
+    parser = ProductParser(runtime=_FakeRuntime(page=page))
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert len(extracted) == 1
+    assert extracted[0].title == "Fallback Candidate"
+    assert page.locator_calls == [first_selector, second_selector]
+
+
 def test_extract_candidates_parses_multiple_candidates_from_card_texts() -> None:
     selector = SEARCH_RESULT_CARD_SELECTORS[0]
     page = _FakePage(
@@ -428,3 +468,53 @@ def test_extract_candidates_returns_empty_when_no_selector_has_cards() -> None:
     extracted = parser.extract_candidates(max_candidates=5)
 
     assert extracted == []
+
+
+def test_extract_candidates_parses_comment_count_from_ten_thousand_paid_text() -> None:
+    selector = SEARCH_RESULT_CARD_SELECTORS[0]
+    page = _FakePage(
+        {
+            selector: [
+                _FakeCard(
+                    "\n".join(
+                        [
+                            "Candidate Paid A",
+                            "\u00a5999",
+                            "1.2\u4e07+\u4eba\u4ed8\u6b3e",
+                        ]
+                    )
+                )
+            ]
+        }
+    )
+    parser = ProductParser(runtime=_FakeRuntime(page=page))
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert len(extracted) == 1
+    assert extracted[0].comment_count == 12000
+
+
+def test_extract_candidates_parses_comment_count_from_integer_paid_text() -> None:
+    selector = SEARCH_RESULT_CARD_SELECTORS[0]
+    page = _FakePage(
+        {
+            selector: [
+                _FakeCard(
+                    "\n".join(
+                        [
+                            "Candidate Paid B",
+                            "\u00a5999",
+                            "5000\u4eba\u4ed8\u6b3e",
+                        ]
+                    )
+                )
+            ]
+        }
+    )
+    parser = ProductParser(runtime=_FakeRuntime(page=page))
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert len(extracted) == 1
+    assert extracted[0].comment_count == 5000

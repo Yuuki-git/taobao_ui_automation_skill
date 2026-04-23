@@ -65,7 +65,10 @@ class ProductParser:
                 extracted.append(candidate)
                 if len(extracted) >= max_candidates:
                     break
-            return extracted
+            if extracted:
+                return extracted
+            # Cards were found but nothing parsable was extracted; try next selector.
+            continue
         return []
 
     def select_best_candidate(
@@ -333,17 +336,23 @@ class ProductParser:
         )
 
     def _is_comment_line(self, lower_line: str) -> bool:
-        return any(
+        if any(
             token in lower_line
             for token in (
                 "sold",
                 "review",
                 "comment",
+                "\u4ed8\u6b3e",
+                "\u4eba\u4ed8\u6b3e",
                 "\u9500\u91cf",
                 "\u8bc4\u8bba",
                 "\u8bc4\u4ef7",
             )
-        )
+        ):
+            return True
+        if ("pay" in lower_line or "paid" in lower_line) and re.search(r"\d", lower_line):
+            return True
+        return False
 
     def _is_shop_line(self, lower_line: str) -> bool:
         return any(
