@@ -210,3 +210,116 @@ def test_empty_candidates_returns_none() -> None:
     selected = parser.select_best_candidate([], "headset", Constraints.from_dict({}))
 
     assert selected is None
+
+
+class _FakeRuntime:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def get_visible_text(self) -> str:
+        return self._text
+
+
+def test_extract_candidates_returns_empty_when_page_text_is_empty() -> None:
+    parser = ProductParser(runtime=_FakeRuntime(""))
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert extracted == []
+
+
+def test_extract_candidates_parses_multiple_candidates_from_mock_text() -> None:
+    parser = ProductParser(
+        runtime=_FakeRuntime(
+            """
+Title: Candidate Alpha
+Price: 1999
+Positive Rate: 99.2%
+Shop: Alpha Flagship Store
+Comments: 1200
+Confidence: 0.88
+
+Title: Candidate Beta
+Price: 899
+Positive Rate: 98.6%
+Shop: Beta Official Shop
+Comments: 340
+Confidence: 0.75
+""".strip()
+        )
+    )
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert len(extracted) == 2
+    assert extracted[0].title == "Candidate Alpha"
+    assert extracted[0].price == 1999.0
+    assert extracted[0].positive_rate == 99.2
+    assert extracted[0].shop_name == "Alpha Flagship Store"
+    assert extracted[0].comment_count == 1200
+    assert extracted[0].confidence == 0.88
+    assert extracted[0].source_page == "search"
+
+
+def test_extract_candidates_skips_block_without_title() -> None:
+    parser = ProductParser(
+        runtime=_FakeRuntime(
+            """
+Price: 1999
+Positive Rate: 99.2%
+Shop: Untitled Shop
+
+Title: Candidate With Title
+Price: 1099
+""".strip()
+        )
+    )
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert len(extracted) == 1
+    assert extracted[0].title == "Candidate With Title"
+
+
+def test_extract_candidates_respects_max_candidates() -> None:
+    parser = ProductParser(
+        runtime=_FakeRuntime(
+            """
+Title: Candidate A
+Price: 100
+
+Title: Candidate B
+Price: 200
+
+Title: Candidate C
+Price: 300
+""".strip()
+        )
+    )
+
+    extracted = parser.extract_candidates(max_candidates=2)
+
+    assert len(extracted) == 2
+    assert [item.title for item in extracted] == ["Candidate A", "Candidate B"]
+
+
+def test_extract_candidates_keeps_none_for_missing_optional_fields() -> None:
+    parser = ProductParser(
+        runtime=_FakeRuntime(
+            """
+Title: Candidate Minimal
+Comments: 9
+""".strip()
+        )
+    )
+
+    extracted = parser.extract_candidates(max_candidates=5)
+
+    assert len(extracted) == 1
+    candidate = extracted[0]
+    assert candidate.title == "Candidate Minimal"
+    assert candidate.price is None
+    assert candidate.positive_rate is None
+    assert candidate.shop_name is None
+    assert candidate.comment_count == 9
+    assert candidate.confidence is None

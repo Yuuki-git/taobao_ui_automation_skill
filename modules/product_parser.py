@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from models import Constraints, ProductCandidate
@@ -27,10 +28,29 @@ class ProductParser:
     task_id: str | None = None
 
     def extract_candidates(self, max_candidates: int = 5) -> list[ProductCandidate]:
-        """Placeholder for phase3B+ browser extraction logic."""
+        """Extract product candidates from visible page text using a basic parser.
 
-        _ = max_candidates
-        return []
+        TODO(phase-3B+): replace text-block parsing with stable DOM/locator parsing.
+        """
+
+        if max_candidates <= 0:
+            return []
+        if self.runtime is None or not hasattr(self.runtime, "get_visible_text"):
+            return []
+
+        raw_text = str(self.runtime.get_visible_text() or "")
+        if not raw_text.strip():
+            return []
+
+        candidates: list[ProductCandidate] = []
+        for block in self._split_candidate_blocks(raw_text):
+            parsed = self._parse_candidate_block(block)
+            if parsed is None:
+                continue
+            candidates.append(parsed)
+            if len(candidates) >= max_candidates:
+                break
+        return candidates
 
     def select_best_candidate(
         self,
@@ -129,3 +149,104 @@ class ProductParser:
             ):
                 matched_hints.extend(hint.casefold() for hint in hints)
         return tuple(dict.fromkeys(matched_hints))
+
+    def _split_candidate_blocks(self, text: str) -> list[str]:
+        normalized = text.replace("\r\n", "\n")
+        blocks = re.split(r"\n\s*\n+", normalized)
+        return [block.strip() for block in blocks if block.strip()]
+
+    def _parse_candidate_block(self, block: str) -> ProductCandidate | None:
+        title: str | None = None
+        price: float | None = None
+        positive_rate: float | None = None
+        shop_name: str | None = None
+        comment_count: int | None = None
+        confidence: float | None = None
+
+        for raw_line in block.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            lower = line.casefold()
+            if lower.startswith(("title:", "title：", "标题:", "标题：")):
+                title = self._extract_text_value(line)
+                continue
+            if lower.startswith(("price:", "price：", "价格:", "价格：", "￥", "$")):
+                price = self._extract_float_value(line)
+                continue
+            if lower.startswith(
+                (
+                    "positive rate:",
+                    "positive rate：",
+                    "positive_rate:",
+                    "positive_rate：",
+                    "好评率:",
+                    "好评率：",
+                )
+            ):
+                positive_rate = self._extract_float_value(line)
+                continue
+            if lower.startswith(("shop:", "shop：", "shop name:", "shop name：", "店铺:", "店铺：")):
+                shop_name = self._extract_text_value(line)
+                continue
+            if lower.startswith(
+                (
+                    "comments:",
+                    "comments：",
+                    "comment count:",
+                    "comment count：",
+                    "comment_count:",
+                    "comment_count：",
+                    "评论:",
+                    "评论：",
+                    "评价:",
+                    "评价：",
+                )
+            ):
+                comment_count = self._extract_int_value(line)
+                continue
+            if lower.startswith(
+                ("confidence:", "confidence：", "置信度:", "置信度：")
+            ):
+                confidence = self._extract_float_value(line)
+                continue
+
+            if title is None and not self._looks_like_key_value_line(line):
+                title = line
+
+        if title is None or not title.strip():
+            return None
+
+        return ProductCandidate(
+            title=title.strip(),
+            price=price,
+            positive_rate=positive_rate,
+            shop_name=shop_name.strip() if isinstance(shop_name, str) else None,
+            product_url=None,
+            comment_count=comment_count,
+            confidence=confidence,
+            source_page="search",
+        )
+
+    def _extract_text_value(self, line: str) -> str:
+        _, _, value = line.partition(":")
+        if not value:
+            _, _, value = line.partition("：")
+        return value.strip()
+
+    def _extract_float_value(self, line: str) -> float | None:
+        cleaned = line.replace(",", "")
+        match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
+        if match is None:
+            return None
+        return float(match.group(0))
+
+    def _extract_int_value(self, line: str) -> int | None:
+        value = self._extract_float_value(line)
+        if value is None:
+            return None
+        return int(value)
+
+    def _looks_like_key_value_line(self, line: str) -> bool:
+        return ":" in line or "：" in line
