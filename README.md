@@ -1,23 +1,37 @@
 # Taobao UI Automation Skill
 
-## 项目简介
-`Taobao UI Automation Skill` 是一个面向 Skill 化调用的淘宝自动化工程骨架。  
-项目目标是提供稳定的输入输出契约、可测试的模块边界和可迭代的自动化流程，而不是一次性脚本。
+## 项目概览
+本项目是一个面向 OpenClaw Skill 形态的淘宝 UI 自动化工程，核心能力包括：
+- 关键词搜索
+- 基于约束的候选商品筛选
+- 可选的加入购物车动作
+- 结构化结果返回
+
+项目目标是提供可测试、可复用、可稳定演示的自动化流程，而不是一次性脚本。
 
 ## 当前实现状态
-已完成核心模块：
-- `models.py`
+已实现模块：
 - `main.py`
-- `modules/error_codes.py`
-- `modules/orchestrator.py`
+- `models.py`
+- `config.py`
 - `modules/browser_runtime.py`
 - `modules/auth_manager.py`
-- `modules/notifier.py`
 - `modules/product_parser.py`
 - `modules/cart_executor.py`
+- `modules/orchestrator.py`
+- `modules/notifier.py`
+- `modules/error_codes.py`
 - `modules/selectors.py`
+- `tools/run_mock_smoke.py`
+- `mock_pages/*`
+- `tests/*`
 
-## 输入输出契约概览
+## OpenClaw 兼容性
+- 本项目按 OpenClaw 风格组织为 Skill 工程。
+- 根目录的 `SKILL.md` 提供 skill 元数据与使用说明。
+- 本地 mock smoke 脚本可在不依赖真实淘宝站点的前提下验证完整执行闭环。
+
+## 输入 / 输出契约
 输入字段（核心）：
 - `platform`
 - `keyword`
@@ -27,7 +41,7 @@
 - `max_candidates`
 - `need_login`
 
-标准输出最小集合：
+输出字段（最小稳定 schema）：
 - `success`
 - `task_status`
 - `selected_product`
@@ -35,13 +49,17 @@
 - `error_code`
 - `error_detail`
 
-## 本地 Mock 闭环演示
-为了稳定演示完整流程，项目提供本地 mock 页面与 smoke 脚本，不依赖真实淘宝页面：
-
-运行命令：
+## 本地 Mock Smoke 演示
+在工作区上级目录运行：
 
 ```bash
 python taobao_ui_automation_skill/tools/run_mock_smoke.py
+```
+
+在项目根目录运行：
+
+```bash
+python tools/run_mock_smoke.py
 ```
 
 示例输出：
@@ -55,7 +73,7 @@ python taobao_ui_automation_skill/tools/run_mock_smoke.py
     "price": 299.0,
     "positive_rate": 99.3,
     "shop_name": "官方旗舰店",
-    "product_url": "file:///D:/taobao-ui-automation-test/taobao_ui_automation_skill/mock_pages/product_detail.html?sku=b",
+    "product_url": "file:///.../mock_pages/product_detail.html?sku=b",
     "comment_count": 12000,
     "confidence": null,
     "source_page": "search_result"
@@ -66,25 +84,19 @@ python taobao_ui_automation_skill/tools/run_mock_smoke.py
 }
 ```
 
-说明：
-- 真实淘宝联调可能在搜索阶段触发验证码或风控页（例如滑块验证）。
-- mock 闭环用于稳定演示“搜索提取 -> 约束筛选 -> 加购执行 -> 标准结果返回”的完整路径。
+## 真实淘宝联调说明
+- 真实淘宝链路已验证到验证码/风控边界。
+- 支持通过 `storage_state` 做会话复用，但真实联调中仍可能触发验证页。
+- 项目当前策略是结构化识别并返回边界状态，而不是尝试绕过风控。
 
-## 运行与测试
-安装依赖：
+## 验证码 / 风控边界
+- 检测到验证码信号（如滑块验证）时，返回 `CAPTCHA_DETECTED`。
+- 检测到风控或访问受限信号时，返回 `RISK_CONTROL_PAGE`。
+- 上述情况统一映射为 `task_status=need_human_intervention`。
+- 不实现验证码或风控绕过逻辑。
 
-```bash
-pip install -r taobao_ui_automation_skill/requirements.txt
-```
-
-运行测试：
+## 测试命令
 
 ```bash
 python -m pytest -q
 ```
-
-## 当前边界
-- 不尝试绕过验证码或风控机制。
-- 不承诺复杂 SKU 的全自动决策。
-- 当前平台范围仅支持 `taobao`。
-- 保持既有标准输出 schema，不额外添加破坏性字段。

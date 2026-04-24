@@ -1,20 +1,18 @@
 ---
 name: taobao-ui-automation-skill
-description: taobao skill for product search, constraint filtering, optional add-to-cart, structured result reporting, and designing/executing the related browser automation workflow
+description: execute or demonstrate a taobao browser automation workflow for product search, constraint-based candidate filtering, optional add-to-cart, captcha/risk-control detection, and structured result reporting. use when the user asks to run, test, review, or explain the taobao ui automation skill, including local mock smoke tests, search_only flows, add_to_cart flows, and human-in-the-loop handling for login, captcha, risk-control, or complex sku cases.
 ---
 
 # Taobao UI Automation Skill
 
 ## Core Behavior
 
-This skill provides a reusable Taobao automation workflow that:
-- accepts normalized task input
-- performs keyword-based product search
-- applies constraint-based candidate filtering
-- optionally executes add-to-cart action
-- returns standardized structured output for downstream use
-
-It is a general Taobao product-search and filtering skill, not a single-item script.
+This skill provides a reusable Taobao UI automation workflow that:
+- validates normalized input payloads
+- performs keyword search
+- extracts and filters product candidates with deterministic rules
+- optionally executes add-to-cart
+- returns a stable structured result schema
 
 ## Expected Input
 
@@ -32,56 +30,17 @@ Example (sample only, not capability boundary):
 ```json
 {
   "platform": "taobao",
-  "keyword": "索尼耳机",
+  "keyword": "蓝牙耳机",
   "constraints": {
     "positive_rate_gte": 99,
-    "price_lte": 3000,
-    "shop_type": "flagship"
+    "price_lte": 300
   },
   "action": "search_only",
   "notify_channel": "feishu",
   "max_candidates": 5,
-  "need_login": true
+  "need_login": false
 }
 ```
-
-## Standard Workflow
-
-1. Validate and normalize payload.
-2. Initialize browser runtime and open Taobao home.
-3. Check auth state.
-4. Run keyword search and wait for a parse-ready search page.
-5. Extract and filter candidates.
-6. Return best match for `search_only`, or continue to add-to-cart for `add_to_cart`.
-7. Return standardized result and emit notifier events.
-
-## Login-State Policy
-
-- No complex automatic login is performed.
-- Session reuse relies on persisted storage state when available.
-- If login is required and not satisfied, return `LOGIN_REQUIRED`.
-- Captcha and risk-control signals are surfaced as structured statuses.
-- Human intervention is expected for login/captcha/risk-control cases.
-
-## Candidate Extraction Policy
-
-- Candidate extraction is modular and replaceable.
-- Extraction should return normalized `ProductCandidate` objects.
-- Parsing should prefer deterministic selectors and stable field mapping.
-- Uncertain extraction should fail with explicit structured errors.
-
-## Filtering Policy
-
-- Filtering is driven by `keyword` and `constraints`, not hardcoded item names.
-- Keyword matching is case-insensitive substring matching in the current version.
-- Supported constraints include positive rate threshold, price bounds, and shop-type preference.
-- No matched candidate must return `NO_MATCHED_PRODUCT`.
-
-## Add-to-Cart Policy
-
-- Add-to-cart is optional and only executed for `action=add_to_cart`.
-- Complex SKU selection is not guaranteed in current scope.
-- SKU ambiguity should return structured failure (for example `SKU_SELECTION_REQUIRED`).
 
 ## Output Format
 
@@ -93,48 +52,80 @@ Standard response fields:
 - `error_code`
 - `error_detail`
 
-Internal `task_id` is for logging/tracing and is not part of the standard output schema.
+Internal `task_id` is used for tracing and logging, and is not part of the standard output schema.
+
+## Standard Workflow
+
+1. Validate payload and normalize constraints.
+2. Start runtime and open target page.
+3. Check login/captcha/risk-control status.
+4. Execute search and wait for parse-ready state.
+5. Extract product candidates.
+6. Filter and rank with constraints.
+7. Return selected product for `search_only`, or continue with add-to-cart for `add_to_cart`.
+
+## Login / Captcha / Risk-Control Policy
+
+- The skill does not implement captcha bypass.
+- Login, captcha, risk-control, and complex SKU cases are handled with human-in-the-loop semantics.
+- When login is required and unavailable, return `LOGIN_REQUIRED`.
+- When captcha signals are detected, return `CAPTCHA_DETECTED`.
+- When risk-control signals are detected, return `RISK_CONTROL_PAGE`.
+- These human-required states should map to `task_status=need_human_intervention`.
+
+## Candidate Extraction Policy
+
+- Candidate extraction is modular and replaceable.
+- The current implementation favors deterministic DOM/locator parsing with safe fallbacks.
+- Missing optional fields are allowed and represented as `None`.
+- Title is required for a valid candidate.
+
+## Filtering Policy
+
+- Filtering is driven by `keyword` and `constraints`.
+- Keyword match is case-insensitive substring matching on candidate title.
+- Constraint checks include positive rate, price range, and shop-type matching.
+- No matched candidate should return `NO_MATCHED_PRODUCT`.
+
+## Add-to-Cart Policy
+
+- Add-to-cart runs only for `action=add_to_cart`.
+- The executor uses centralized selectors and success signals.
+- For complex SKU pages requiring manual decision, return `SKU_SELECTION_REQUIRED`.
+- If success cannot be confirmed after click + short polling, return `ADD_CART_FAILED`.
 
 ## Error Codes
 
-Common codes include:
+Typical structured codes include:
 - `INVALID_INPUT`
 - `LOGIN_REQUIRED`
 - `CAPTCHA_DETECTED`
 - `RISK_CONTROL_PAGE`
 - `SEARCH_TIMEOUT`
-- `NO_SEARCH_RESULT`
 - `NO_MATCHED_PRODUCT`
-- `DETAIL_PARSE_FAILED`
 - `ADD_CART_FAILED`
 - `SKU_SELECTION_REQUIRED`
 - `PAGE_STRUCTURE_CHANGED`
 - `NETWORK_ERROR`
 - `UNKNOWN_ERROR`
 
-## Failure-Handling Rules
-
-- Use structured exceptions and structured result mapping.
-- Do not swallow exceptions silently.
-- Preserve stable output contract on both success and failure.
-- Prefer explicit error code + message + detail over ambiguous fallback text.
-
-## Non-Functional Rules
-
-- Keep modules focused and loosely coupled.
-- Preserve deterministic behavior where possible.
-- Use logging with internal task correlation.
-- Avoid unnecessary heavy dependencies.
-
-## Reporting Rules
-
-- Always return standardized output object.
-- Ensure result is human-readable (`message`) and machine-readable (`error_code`, `error_detail`).
-- Keep notifier behavior replaceable; current implementation may be log-first.
-
 ## Boundaries
 
-- Current platform scope is Taobao only.
-- No captcha bypass guarantees.
-- No guarantee for fully automated complex SKU flows.
-- Do not hardcode sample keyword/brand terms into business logic.
+- Platform scope is currently `taobao` only.
+- No stealth or anti-bot plugin is required or enabled by default.
+- No attempt is made to bypass captcha or risk-control restrictions.
+- Complex SKU automation is intentionally limited and may require manual intervention.
+
+## Local Mock Smoke Usage
+
+Use local mock pages for stable end-to-end demonstration without relying on the real Taobao website:
+
+- From workspace parent:
+  - `python taobao_ui_automation_skill/tools/run_mock_smoke.py`
+- From project root:
+  - `python tools/run_mock_smoke.py`
+
+The mock smoke path validates:
+- candidate extraction from local search page
+- deterministic filtering and best-candidate selection
+- add-to-cart execution and success confirmation on local detail page

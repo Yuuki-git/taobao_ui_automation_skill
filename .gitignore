@@ -4,6 +4,10 @@ __pycache__/
 *.pyo
 *.pyd
 .venv/
+
 storage/taobao_storage_state.json
 storage/taobao_user_data/
 storage/*.json
+!storage/.gitkeep
+
+*.zip
