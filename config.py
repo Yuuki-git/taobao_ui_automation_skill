@@ -27,7 +27,7 @@ class SkillConfig:
     default_notify_channel: str = "feishu"
     default_max_candidates: int = 5
     default_need_login: bool = True
-    default_headless: bool = True
+    default_headless: bool = False
     default_timeout_ms: int = 15000
     taobao_home_url: str = "https://www.taobao.com"
     storage_state_path: Path = DEFAULT_STORAGE_STATE_PATH
@@ -44,7 +44,7 @@ def get_config() -> SkillConfig:
         default_max_candidates=int(os.getenv("SKILL_DEFAULT_MAX_CANDIDATES", "5")),
         default_need_login=os.getenv("SKILL_DEFAULT_NEED_LOGIN", "true").lower()
         == "true",
-        default_headless=os.getenv("SKILL_HEADLESS", "true").lower() == "true",
+        default_headless=os.getenv("SKILL_HEADLESS", "false").lower() == "true",
         default_timeout_ms=int(os.getenv("SKILL_TIMEOUT_MS", "15000")),
         taobao_home_url=os.getenv("SKILL_TAOBAO_HOME_URL", "https://www.taobao.com"),
         storage_state_path=Path(

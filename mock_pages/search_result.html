@@ -1,0 +1,133 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mock Taobao Search Result</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #ff5000;
+      --line: #e5e7eb;
+    }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #fbfbfd 0%, var(--bg) 100%);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+    }
+    .page {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 24px 20px 40px;
+    }
+    .search-head {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+    }
+    .search-head h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .search-head p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      min-height: 210px;
+    }
+    .item a {
+      text-decoration: none;
+      color: inherit;
+    }
+    .item .title {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+    .item .price {
+      color: var(--accent);
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .item .meta {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fff2e8;
+      color: #b45309;
+      font-size: 12px;
+      font-weight: 600;
+      width: fit-content;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="search-head">
+      <h1>搜索结果：蓝牙耳机</h1>
+      <p>共找到 3 件相关商品（本地 mock 页面）</p>
+    </section>
+
+    <section class="result-grid m-itemlist items" aria-label="search-result-list">
+      <article class="item mock-product-card" data-index="0" data-testid="mock-card-a">
+        <a href="product_detail.html?sku=a" class="detail-link" data-role="detail-link">
+          <div class="title">蓝牙耳机 A</div>
+          <div class="price">¥199</div>
+          <div class="meta">好评率 98.5%</div>
+          <div class="meta">普通店铺</div>
+          <div class="meta">3000人付款</div>
+        </a>
+      </article>
+
+      <article class="item mock-product-card" data-index="1" data-testid="mock-card-b">
+        <a href="product_detail.html?sku=b" class="detail-link" data-role="detail-link">
+          <div class="title">蓝牙耳机 B</div>
+          <div class="price">¥299</div>
+          <div class="meta">好评率 99.3%</div>
+          <div class="meta">官方旗舰店</div>
+          <div class="meta">1.2万+人付款</div>
+        </a>
+        <span class="badge">官方推荐</span>
+      </article>
+
+      <article class="item mock-product-card" data-index="2" data-testid="mock-card-c">
+        <a href="product_detail.html?sku=c" class="detail-link" data-role="detail-link">
+          <div class="title">蓝牙耳机 C</div>
+          <div class="price">¥159</div>
+          <div class="meta">好评率 99.1%</div>
+          <div class="meta">企业店铺</div>
+          <div class="meta">5000人付款</div>
+        </a>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

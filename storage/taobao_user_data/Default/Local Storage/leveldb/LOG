@@ -1,0 +1,14 @@
+2026/04/24-10:28:52.306 4940 Creating DB D:\taobao-ui-automation-test\taobao_ui_automation_skill\storage\taobao_user_data\Default\Local Storage\leveldb since it was missing.
+2026/04/24-10:28:52.326 4940 Reusing MANIFEST D:\taobao-ui-automation-test\taobao_ui_automation_skill\storage\taobao_user_data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/04/24-10:29:12.441 8778 Level-0 table #5: started
+2026/04/24-10:29:12.462 8778 Level-0 table #5: 507125 bytes OK
+2026/04/24-10:29:12.466 8778 Delete type=0 #3
+2026/04/24-10:29:16.437 8778 Level-0 table #7: started
+2026/04/24-10:29:16.451 8778 Level-0 table #7: 348480 bytes OK
+2026/04/24-10:29:16.453 8778 Delete type=0 #4
+2026/04/24-10:31:52.202 8778 Level-0 table #9: started
+2026/04/24-10:31:52.210 8778 Level-0 table #9: 117214 bytes OK
+2026/04/24-10:31:52.212 8778 Delete type=0 #6
+2026/04/24-10:32:20.730 8778 Level-0 table #11: started
+2026/04/24-10:32:20.736 8778 Level-0 table #11: 170557 bytes OK
+2026/04/24-10:32:20.738 8778 Delete type=0 #8

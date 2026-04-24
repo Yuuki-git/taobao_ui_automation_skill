@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from typing import Any, Iterable
+from urllib.parse import urljoin
 
 from models import Constraints, ProductCandidate
 from modules.selectors import SEARCH_RESULT_CARD_SELECTORS
@@ -41,6 +42,8 @@ class ProductParser:
         if self.runtime is None:
             return []
 
+        base_url = self._get_runtime_page_url()
+
         if hasattr(self.runtime, "get_visible_text"):
             visible_text = str(self.runtime.get_visible_text() or "").strip()
             if not visible_text:
@@ -59,7 +62,7 @@ class ProductParser:
 
             extracted: list[ProductCandidate] = []
             for card in cards:
-                candidate = self._extract_candidate_from_card(card)
+                candidate = self._extract_candidate_from_card(card, base_url=base_url)
                 if candidate is None:
                     continue
                 extracted.append(candidate)
@@ -184,6 +187,16 @@ class ProductParser:
                 return None
         return None
 
+    def _get_runtime_page_url(self) -> str:
+        if self.runtime is None:
+            return ""
+        if hasattr(self.runtime, "get_page_url"):
+            try:
+                return str(self.runtime.get_page_url() or "")
+            except Exception:
+                return ""
+        return ""
+
     def _safe_locator_all(self, page: Any, selector: str) -> list[Any]:
         try:
             locator_group = page.locator(selector)
@@ -205,7 +218,9 @@ class ProductParser:
                 return True
         return False
 
-    def _extract_candidate_from_card(self, card: Any) -> ProductCandidate | None:
+    def _extract_candidate_from_card(
+        self, card: Any, *, base_url: str = ""
+    ) -> ProductCandidate | None:
         text = self._safe_inner_text(card)
         if not text:
             return None
@@ -223,11 +238,44 @@ class ProductParser:
             price=self._extract_price("\n".join(lines)),
             positive_rate=self._extract_positive_rate("\n".join(lines)),
             shop_name=self._extract_shop_name(lines),
-            product_url=None,
+            product_url=self._extract_product_url(card, base_url=base_url),
             comment_count=self._extract_comment_count("\n".join(lines)),
             confidence=self._extract_confidence("\n".join(lines)),
             source_page="search_result",
         )
+
+    def _extract_product_url(self, card: Any, *, base_url: str) -> str | None:
+        href = self._extract_href_from_card(card)
+        if not href:
+            return None
+        if base_url:
+            return urljoin(base_url, href)
+        return href
+
+    def _extract_href_from_card(self, card: Any) -> str | None:
+        try:
+            links = card.locator("a[href]").all()
+        except Exception:
+            return None
+
+        for link in links:
+            href = self._safe_get_attribute(link, "href")
+            if not href:
+                continue
+            href = href.strip()
+            if not href or href.lower().startswith("javascript:"):
+                continue
+            return href
+        return None
+
+    def _safe_get_attribute(self, locator: Any, attr_name: str) -> str | None:
+        try:
+            value = locator.get_attribute(attr_name)
+        except Exception:
+            return None
+        if value is None:
+            return None
+        return str(value)
 
     def _safe_inner_text(self, locator: Any) -> str:
         try:
