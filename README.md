@@ -1,13 +1,11 @@
 # Taobao UI Automation Skill
 
 ## 项目简介
-
-`Taobao UI Automation Skill` 是一个兼容 skill 思路的 Taobao 浏览器自动化工程骨架。  
-目标是提供标准化输入输出、清晰模块边界、可持续迭代的自动化流程，而不是一次性脚本。
+`Taobao UI Automation Skill` 是一个面向 Skill 化调用的淘宝自动化工程骨架。  
+项目目标是提供稳定的输入输出契约、可测试的模块边界和可迭代的自动化流程，而不是一次性脚本。
 
 ## 当前实现状态
-
-已完成：
+已完成核心模块：
 - `models.py`
 - `main.py`
 - `modules/error_codes.py`
@@ -15,14 +13,11 @@
 - `modules/browser_runtime.py`
 - `modules/auth_manager.py`
 - `modules/notifier.py`
-
-未完成 / 占位：
 - `modules/product_parser.py`
 - `modules/cart_executor.py`
 - `modules/selectors.py`
 
 ## 输入输出契约概览
-
 输入字段（核心）：
 - `platform`
 - `keyword`
@@ -32,7 +27,7 @@
 - `max_candidates`
 - `need_login`
 
-标准输出最小集：
+标准输出最小集合：
 - `success`
 - `task_status`
 - `selected_product`
@@ -40,25 +35,46 @@
 - `error_code`
 - `error_detail`
 
-## 关键设计原则
+## 本地 Mock 闭环演示
+为了稳定演示完整流程，项目提供本地 mock 页面与 smoke 脚本，不依赖真实淘宝页面：
 
-- 通用商品搜索 skill，不是单商品脚本
-- human-in-the-loop（登录、验证码、风控等人工介入场景可被结构化返回）
-- session reuse（优先复用 storage state）
-- deterministic parsing first（优先稳定、可测、可维护的解析路径）
+运行命令：
 
-## 运行方式
+```bash
+python taobao_ui_automation_skill/tools/run_mock_smoke.py
+```
 
+示例输出：
+
+```json
+{
+  "success": true,
+  "task_status": "completed",
+  "selected_product": {
+    "title": "蓝牙耳机 B",
+    "price": 299.0,
+    "positive_rate": 99.3,
+    "shop_name": "官方旗舰店",
+    "product_url": "file:///D:/taobao-ui-automation-test/taobao_ui_automation_skill/mock_pages/product_detail.html?sku=b",
+    "comment_count": 12000,
+    "confidence": null,
+    "source_page": "search_result"
+  },
+  "message": "Task completed and product added to cart.",
+  "error_code": null,
+  "error_detail": null
+}
+```
+
+说明：
+- 真实淘宝联调可能在搜索阶段触发验证码或风控页（例如滑块验证）。
+- mock 闭环用于稳定演示“搜索提取 -> 约束筛选 -> 加购执行 -> 标准结果返回”的完整路径。
+
+## 运行与测试
 安装依赖：
 
 ```bash
-pip install -r requirements.txt
-```
-
-安装 Playwright 浏览器：
-
-```bash
-python -m playwright install chromium
+pip install -r taobao_ui_automation_skill/requirements.txt
 ```
 
 运行测试：
@@ -67,16 +83,8 @@ python -m playwright install chromium
 python -m pytest -q
 ```
 
-## 当前边界说明
-
-- 不自动绕过验证码
-- 不承诺复杂 SKU 全自动化
-- 当前仅支持 `taobao`
-
-## 测试状态
-
-phase1 + phase2 的测试已建立并持续验证核心契约与流程行为，包括：
-- 输入校验与标准输出
-- runtime 生命周期与基础操作
-- auth 状态判定行为
-- orchestrator 编排层关键路径
+## 当前边界
+- 不尝试绕过验证码或风控机制。
+- 不承诺复杂 SKU 的全自动决策。
+- 当前平台范围仅支持 `taobao`。
+- 保持既有标准输出 schema，不额外添加破坏性字段。
