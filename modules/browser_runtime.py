@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -8,8 +9,52 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from config import SkillConfig
-from modules.error_codes import NETWORK_ERROR, PAGE_STRUCTURE_CHANGED, SEARCH_TIMEOUT, SkillError
+from modules.error_codes import (
+    CAPTCHA_DETECTED,
+    NETWORK_ERROR,
+    PAGE_STRUCTURE_CHANGED,
+    RISK_CONTROL_PAGE,
+    SEARCH_TIMEOUT,
+    SkillError,
+)
 from modules.selectors import SEARCH_INPUT_SELECTOR
+
+
+_SEARCH_READY_WAIT_JS = """
+() => {
+  const href = window.location.href.toLowerCase();
+  const urlReady = href.includes("search") || href.includes("q=");
+  const hasResultContainer = Boolean(
+    document.querySelector(".m-itemlist, .items, .tb-item, [data-index], .ctx-box")
+  );
+  const hasNoResultState = Boolean(
+    document.querySelector(".no-result, .empty, .none, [class*='no-result'], [class*='empty']")
+  );
+  const hasSearchResultHint = /search|result|找到|相关商品|没有找到/i.test(
+    document.body ? document.body.innerText : ""
+  );
+  return urlReady && (hasResultContainer || hasNoResultState || hasSearchResultHint);
+}
+"""
+
+_CAPTCHA_TOKENS = (
+    "请拖动下方滑块完成验证",
+    "拖动滑块",
+    "滑块完成验证",
+    "安全验证",
+    "验证失败",
+    "验证码",
+    "captcha",
+    "verify",
+)
+
+_RISK_CONTROL_TOKENS = (
+    "punish",
+    "risk",
+    "异常访问",
+    "访问受限",
+    "风控",
+)
 
 
 class BrowserRuntime:
@@ -137,33 +182,54 @@ class BrowserRuntime:
 
         page = self._require_page()
         timeout = self.config.default_timeout_ms
+        check_timeout_ms = 600
+        deadline = time.monotonic() + (timeout / 1000)
+
         try:
             page.wait_for_load_state("domcontentloaded", timeout=timeout)
-            page.wait_for_function(
-                """
-                () => {
-                  const href = window.location.href.toLowerCase();
-                  const urlReady = href.includes("search") || href.includes("q=");
-                  const hasResultContainer = Boolean(
-                    document.querySelector(".m-itemlist, .items, .tb-item, [data-index], .ctx-box")
-                  );
-                  const hasNoResultState = Boolean(
-                    document.querySelector(".no-result, .empty, .none, [class*='no-result'], [class*='empty']")
-                  );
-                  const hasSearchResultHint = /search|result|找到|相关商品|没有找到/i.test(
-                    document.body ? document.body.innerText : ""
-                  );
-                  return urlReady && (hasResultContainer || hasNoResultState || hasSearchResultHint);
-                }
-                """,
-                timeout=timeout,
-            )
+            while True:
+                blocking_error = self._detect_search_blocking_error()
+                if blocking_error is not None:
+                    raise blocking_error
+
+                remaining_ms = int((deadline - time.monotonic()) * 1000)
+                if remaining_ms <= 0:
+                    break
+
+                try:
+                    page.wait_for_function(
+                        _SEARCH_READY_WAIT_JS,
+                        timeout=min(check_timeout_ms, remaining_ms),
+                    )
+                    return
+                except PlaywrightTimeoutError:
+                    # Keep polling in small windows so captcha/risk pages
+                    # can be surfaced quickly instead of generic timeout.
+                    continue
         except PlaywrightTimeoutError as exc:
             raise SkillError(
                 SEARCH_TIMEOUT,
                 "Search results page is not ready before timeout.",
-                {"timeout_ms": timeout},
+                {
+                    "timeout_ms": timeout,
+                    "stage": "SEARCH_PRODUCT",
+                    "current_url": self.get_page_url(),
+                },
             ) from exc
+
+        blocking_error = self._detect_search_blocking_error()
+        if blocking_error is not None:
+            raise blocking_error
+
+        raise SkillError(
+            SEARCH_TIMEOUT,
+            "Search results page is not ready before timeout.",
+            {
+                "timeout_ms": timeout,
+                "stage": "SEARCH_PRODUCT",
+                "current_url": self.get_page_url(),
+            },
+        )
 
     def get_page_html(self) -> str:
         """Return full page HTML."""
@@ -233,6 +299,65 @@ class BrowserRuntime:
                 "扫码登录",
             )
         )
+
+    def _detect_search_blocking_error(self) -> SkillError | None:
+        """Detect CAPTCHA/risk pages while waiting for search results."""
+
+        page_url = self._safe_lower(self.get_page_url())
+        page_title = self._safe_lower(self.get_page_title())
+        visible_text = self._safe_lower(self.get_visible_text())
+
+        risk_match = self._find_signal_match(
+            sources=(("url", page_url), ("visible_text", visible_text), ("title", page_title)),
+            tokens=_RISK_CONTROL_TOKENS,
+        )
+        if risk_match is not None:
+            source_name, token = risk_match
+            return SkillError(
+                RISK_CONTROL_PAGE,
+                "Risk control page detected during search.",
+                {
+                    "stage": "SEARCH_PRODUCT",
+                    "current_url": self.get_page_url(),
+                    "detection_source": f"{source_name}:{token}",
+                },
+            )
+
+        captcha_match = self._find_signal_match(
+            sources=(("url", page_url), ("title", page_title), ("visible_text", visible_text)),
+            tokens=_CAPTCHA_TOKENS,
+        )
+        if captcha_match is not None:
+            source_name, token = captcha_match
+            return SkillError(
+                CAPTCHA_DETECTED,
+                "Captcha challenge detected during search.",
+                {
+                    "stage": "SEARCH_PRODUCT",
+                    "current_url": self.get_page_url(),
+                    "detection_source": f"{source_name}:{token}",
+                },
+            )
+
+        return None
+
+    @staticmethod
+    def _find_signal_match(
+        *,
+        sources: tuple[tuple[str, str], ...],
+        tokens: tuple[str, ...],
+    ) -> tuple[str, str] | None:
+        for source_name, source_value in sources:
+            if not source_value:
+                continue
+            for token in tokens:
+                if token in source_value:
+                    return source_name, token
+        return None
+
+    @staticmethod
+    def _safe_lower(value: str) -> str:
+        return value.lower() if isinstance(value, str) else ""
 
     def _require_page(self) -> Any:
         if self._page is None:

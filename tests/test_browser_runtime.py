@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 
+import pytest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -8,6 +9,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from config import SkillConfig
 from modules.browser_runtime import BrowserRuntime
+from modules.error_codes import CAPTCHA_DETECTED, RISK_CONTROL_PAGE, SkillError
 
 
 class _FakePage:
@@ -176,3 +178,33 @@ def test_is_login_page_detects_login_hint(tmp_path: Path) -> None:
     page.url = "https://login.taobao.com/member/login.jhtml"
 
     assert runtime.is_login_page() is True
+
+
+def test_search_keyword_detects_captcha_in_search_stage(tmp_path: Path) -> None:
+    runtime, _pw, _chromium, _browser, page = _make_runtime(tmp_path)
+    runtime.start()
+    page.visible_text = "请拖动下方滑块完成验证"
+
+    with pytest.raises(SkillError) as exc_info:
+        runtime.search_keyword("bluetooth headset")
+
+    assert exc_info.value.code == CAPTCHA_DETECTED
+    assert exc_info.value.detail is not None
+    assert exc_info.value.detail["stage"] == "SEARCH_PRODUCT"
+    assert exc_info.value.detail["current_url"] == page.url
+    assert str(exc_info.value.detail["detection_source"]).startswith("visible_text:")
+
+
+def test_search_keyword_detects_risk_control_in_search_stage(tmp_path: Path) -> None:
+    runtime, _pw, _chromium, _browser, page = _make_runtime(tmp_path)
+    runtime.start()
+    page.url = "https://sec.taobao.com/punish?x=1"
+
+    with pytest.raises(SkillError) as exc_info:
+        runtime.search_keyword("bluetooth headset")
+
+    assert exc_info.value.code == RISK_CONTROL_PAGE
+    assert exc_info.value.detail is not None
+    assert exc_info.value.detail["stage"] == "SEARCH_PRODUCT"
+    assert exc_info.value.detail["current_url"] == page.url
+    assert str(exc_info.value.detail["detection_source"]).startswith("url:")
